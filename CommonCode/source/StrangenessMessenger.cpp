@@ -94,6 +94,12 @@ bool StrangenessTreeMessenger::Initialize(TTree *tree)
    Tree->SetBranchAddress("RecoConversionID",      RecoConversionID);
    Tree->SetBranchAddress("RecoGoodTrack",         RecoGoodTrack);
    Tree->SetBranchAddress("RecoGoodNeutral",       RecoGoodNeutral);
+   Tree->SetBranchAddress("RecoGenEfficiencyK",    RecoGenEfficiencyK);
+   Tree->SetBranchAddress("RecoGenEfficiencyPi",   RecoGenEfficiencyPi);
+   Tree->SetBranchAddress("RecoGenEfficiencyP",    RecoGenEfficiencyP);
+   Tree->SetBranchAddress("RecoEfficiencyK",       RecoEfficiencyK);
+   Tree->SetBranchAddress("RecoEfficiencyPi",      RecoEfficiencyPi);
+   Tree->SetBranchAddress("RecoEfficiencyP",       RecoEfficiencyP);
    Tree->SetBranchAddress("RecoEfficiencyKAsK",    RecoEfficiencyKAsK);
    Tree->SetBranchAddress("RecoEfficiencyKAsPi",   RecoEfficiencyKAsPi);
    Tree->SetBranchAddress("RecoEfficiencyKAsP",    RecoEfficiencyKAsP);

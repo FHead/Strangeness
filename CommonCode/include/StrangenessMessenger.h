@@ -73,6 +73,12 @@ public:
    long long  RecoConversionID[STRANGE_MAX_RECO];
    long long  RecoGoodTrack[STRANGE_MAX_RECO];
    long long  RecoGoodNeutral[STRANGE_MAX_RECO];
+   double     RecoGenEfficiencyK[STRANGE_MAX_RECO];
+   double     RecoGenEfficiencyPi[STRANGE_MAX_RECO];
+   double     RecoGenEfficiencyP[STRANGE_MAX_RECO];
+   double     RecoEfficiencyK[STRANGE_MAX_RECO];
+   double     RecoEfficiencyPi[STRANGE_MAX_RECO];
+   double     RecoEfficiencyP[STRANGE_MAX_RECO];
    double     RecoEfficiencyKAsK[STRANGE_MAX_RECO];
    double     RecoEfficiencyKAsPi[STRANGE_MAX_RECO];
    double     RecoEfficiencyKAsP[STRANGE_MAX_RECO];
