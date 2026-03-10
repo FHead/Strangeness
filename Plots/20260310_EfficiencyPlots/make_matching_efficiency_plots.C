@@ -42,10 +42,10 @@ void DrawAcceptanceLines(double YMin, double YMax)
 
    for(TLine *L : {&L1, &L2})
    {
-      L->SetLineColor(kBlack);
+      L->SetLineColor(kMagenta + 1);
       L->SetLineWidth(6);
-      L->SetLineStyle(1);
-      L->Draw("same");
+      L->SetLineStyle(3);
+      L->DrawClone("same");
    }
 
    gPad->Modified();
