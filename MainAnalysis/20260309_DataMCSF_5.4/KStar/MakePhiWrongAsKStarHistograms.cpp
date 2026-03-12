@@ -1,6 +1,10 @@
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <string>
+#include <algorithm>
+#include <utility>
+#include <vector>
 
 #include "TFile.h"
 #include "TH1D.h"
@@ -17,16 +21,30 @@ constexpr int kMassBins = 320;
 constexpr double kAbsCosMin = 0.15;
 constexpr double kAbsCosMax = 0.675;
 constexpr double kMatchAngleMax = 0.01;
+constexpr double kTruthEnergyMatchMax = 0.025;
+constexpr double kTruthMomentumAngleMax = 0.025;
 constexpr long long kKaonTagThreshold = 2;
 constexpr long long kPionTagThreshold = 2;
 constexpr int kMaxReco = 10000;
 constexpr int kMaxPhi = 4096;
+constexpr int kMaxGen = 20000;
 
 struct TrackKinematics {
   double px = 0.0;
   double py = 0.0;
   double pz = 0.0;
 };
+
+double angleBetween(double px1, double py1, double pz1,
+                    double px2, double py2, double pz2) {
+  const double p1 = std::sqrt(px1 * px1 + py1 * py1 + pz1 * pz1);
+  const double p2 = std::sqrt(px2 * px2 + py2 * py2 + pz2 * pz2);
+  if (p1 <= 0.0 || p2 <= 0.0) return std::numeric_limits<double>::infinity();
+  double c = (px1 * px2 + py1 * py2 + pz1 * pz2) / (p1 * p2);
+  if (c > 1.0) c = 1.0;
+  if (c < -1.0) c = -1.0;
+  return std::acos(c);
+}
 
 double buildMass(const TrackKinematics& kaon, const TrackKinematics& pion) {
   const double pK2 = kaon.px * kaon.px + kaon.py * kaon.py + kaon.pz * kaon.pz;
@@ -99,6 +117,16 @@ int main(int argc, char* argv[]) {
   double phiReco1Angle[kMaxPhi] = {0.0};
   double phiReco2Angle[kMaxPhi] = {0.0};
 
+  long long nGen = 0;
+  double genPx[kMaxGen] = {0.0};
+  double genPy[kMaxGen] = {0.0};
+  double genPz[kMaxGen] = {0.0};
+  double genE[kMaxGen] = {0.0};
+  long long genID[kMaxGen] = {0};
+  long long genStatus[kMaxGen] = {0};
+  long long genMatchIndex[kMaxGen] = {0};
+  double genMatchAngle[kMaxGen] = {0.0};
+
   tree->SetBranchAddress("NReco", &nReco);
   tree->SetBranchAddress("RecoPx", recoPx);
   tree->SetBranchAddress("RecoPy", recoPy);
@@ -113,6 +141,15 @@ int main(int argc, char* argv[]) {
   tree->SetBranchAddress("PhiReco2ID[NPhi]", phiReco2ID);
   tree->SetBranchAddress("PhiReco1Angle[NPhi]", phiReco1Angle);
   tree->SetBranchAddress("PhiReco2Angle[NPhi]", phiReco2Angle);
+  tree->SetBranchAddress("NGen", &nGen);
+  tree->SetBranchAddress("GenPx", genPx);
+  tree->SetBranchAddress("GenPy", genPy);
+  tree->SetBranchAddress("GenPz", genPz);
+  tree->SetBranchAddress("GenE", genE);
+  tree->SetBranchAddress("GenID", genID);
+  tree->SetBranchAddress("GenStatus", genStatus);
+  tree->SetBranchAddress("GenMatchIndex", genMatchIndex);
+  tree->SetBranchAddress("GenMatchAngle", genMatchAngle);
 
   TH1D hMassKaonTag("hPhiWrongAsKStarMassKaonTag",
                     "#phi#rightarrow K^{+}K^{-} treated as K#pi, kaon tag; m(K#pi) [GeV]; Candidates / bin",
@@ -137,38 +174,124 @@ int main(int argc, char* argv[]) {
   for (long long entry = 0; entry < entryCount; ++entry) {
     tree->GetEntry(entry);
 
-    for (long long iPhi = 0; iPhi < nPhi; ++iPhi) {
-      totalCandidates++;
+    if (nPhi > 0) {
+      for (long long iPhi = 0; iPhi < nPhi; ++iPhi) {
+        totalCandidates++;
 
-      const long long reco1 = phiReco1ID[iPhi];
-      const long long reco2 = phiReco2ID[iPhi];
-      if (reco1 < 0 || reco2 < 0 || reco1 >= nReco || reco2 >= nReco) continue;
-      passValidRecoID++;
+        const long long reco1 = phiReco1ID[iPhi];
+        const long long reco2 = phiReco2ID[iPhi];
+        if (reco1 < 0 || reco2 < 0 || reco1 >= nReco || reco2 >= nReco) continue;
+        passValidRecoID++;
 
-      if (phiReco1Angle[iPhi] >= matchAngleMax || phiReco2Angle[iPhi] >= matchAngleMax) continue;
-      passMatchAngle++;
+        if (phiReco1Angle[iPhi] >= matchAngleMax || phiReco2Angle[iPhi] >= matchAngleMax) continue;
+        passMatchAngle++;
 
-      if (recoGoodTrack[reco1] != 1 || recoGoodTrack[reco2] != 1) continue;
-      passGoodTrack++;
+        if (recoGoodTrack[reco1] != 1 || recoGoodTrack[reco2] != 1) continue;
+        passGoodTrack++;
 
-      const TrackKinematics assumedKaon{recoPx[reco1], recoPy[reco1], recoPz[reco1]};
-      const TrackKinematics assumedPion{recoPx[reco2], recoPy[reco2], recoPz[reco2]};
-      if (!passAcceptance(assumedKaon) || !passAcceptance(assumedPion)) continue;
-      passAcceptanceBoth++;
+        const TrackKinematics assumedKaon{recoPx[reco1], recoPy[reco1], recoPz[reco1]};
+        const TrackKinematics assumedPion{recoPx[reco2], recoPy[reco2], recoPz[reco2]};
+        if (!passAcceptance(assumedKaon) || !passAcceptance(assumedPion)) continue;
+        passAcceptanceBoth++;
 
-      if (recoCharge[reco1] * recoCharge[reco2] >= 0) continue;
-      passOppositeCharge++;
+        if (recoCharge[reco1] * recoCharge[reco2] >= 0) continue;
+        passOppositeCharge++;
 
-      const double mass = buildMass(assumedKaon, assumedPion);
-      hMassAccepted.Fill(mass);
+        const double mass = buildMass(assumedKaon, assumedPion);
+        hMassAccepted.Fill(mass);
 
-      if (recoPIDKaon[reco1] < kKaonTagThreshold) continue;
-      passKaonTag++;
-      hMassKaonTag.Fill(mass);
+        if (recoPIDKaon[reco1] < kKaonTagThreshold) continue;
+        passKaonTag++;
+        hMassKaonTag.Fill(mass);
 
-      if (recoPIDPion[reco2] < kPionTagThreshold) continue;
-      passKaonPionTag++;
-      hMassKaonPionTag.Fill(mass);
+        if (recoPIDPion[reco2] < kPionTagThreshold) continue;
+        passKaonPionTag++;
+        hMassKaonPionTag.Fill(mass);
+      }
+    } else {
+      std::vector<long long> kPlus;
+      std::vector<std::pair<double, long long>> kMinus;
+      kPlus.reserve(64);
+      kMinus.reserve(64);
+      for (long long i = 0; i < nGen; ++i) {
+        if (genStatus[i] != 1) continue;
+
+        const long long reco = genMatchIndex[i];
+        if (reco < 0 || reco >= nReco) continue;
+        if (genMatchAngle[i] >= matchAngleMax) continue;
+        if (recoGoodTrack[reco] != 1) continue;
+        const TrackKinematics t{recoPx[reco], recoPy[reco], recoPz[reco]};
+        if (!passAcceptance(t)) continue;
+
+        if (genID[i] == 321 && recoCharge[reco] > 0) kPlus.push_back(i);
+        if (genID[i] == -321 && recoCharge[reco] < 0) kMinus.push_back({genE[i], i});
+      }
+      std::sort(kMinus.begin(), kMinus.end());
+
+      for (long long iPhi = 0; iPhi < nGen; ++iPhi) {
+        if (genID[iPhi] != 333) continue;
+        totalCandidates++;
+
+        long long bestKPlus = -1;
+        long long bestKMinus = -1;
+        double bestAbsDeltaE = std::numeric_limits<double>::infinity();
+        double bestAngle = std::numeric_limits<double>::infinity();
+
+        for (long long i : kPlus) {
+          const double targetE = genE[iPhi] - genE[i];
+          auto beginIt =
+              std::lower_bound(kMinus.begin(), kMinus.end(), std::make_pair(targetE - kTruthEnergyMatchMax, -1LL));
+          auto endIt =
+              std::upper_bound(kMinus.begin(), kMinus.end(), std::make_pair(targetE + kTruthEnergyMatchMax, std::numeric_limits<long long>::max()));
+          for (auto it = beginIt; it != endIt; ++it) {
+            const long long j = it->second;
+            const double absDeltaE = std::fabs(genE[i] + genE[j] - genE[iPhi]);
+            if (absDeltaE >= bestAbsDeltaE) continue;
+            const double sx = genPx[i] + genPx[j];
+            const double sy = genPy[i] + genPy[j];
+            const double sz = genPz[i] + genPz[j];
+            const double angle = angleBetween(sx, sy, sz, genPx[iPhi], genPy[iPhi], genPz[iPhi]);
+            bestAbsDeltaE = absDeltaE;
+            bestAngle = angle;
+            bestKPlus = i;
+            bestKMinus = j;
+          }
+        }
+
+        if (bestKPlus < 0 || bestKMinus < 0) continue;
+        if (bestAbsDeltaE >= kTruthEnergyMatchMax) continue;
+        if (bestAngle >= kTruthMomentumAngleMax) continue;
+
+        const long long reco1 = genMatchIndex[bestKPlus];
+        const long long reco2 = genMatchIndex[bestKMinus];
+        if (reco1 < 0 || reco2 < 0 || reco1 >= nReco || reco2 >= nReco) continue;
+        passValidRecoID++;
+
+        if (genMatchAngle[bestKPlus] >= matchAngleMax || genMatchAngle[bestKMinus] >= matchAngleMax) continue;
+        passMatchAngle++;
+
+        if (recoGoodTrack[reco1] != 1 || recoGoodTrack[reco2] != 1) continue;
+        passGoodTrack++;
+
+        const TrackKinematics assumedKaon{recoPx[reco1], recoPy[reco1], recoPz[reco1]};
+        const TrackKinematics assumedPion{recoPx[reco2], recoPy[reco2], recoPz[reco2]};
+        if (!passAcceptance(assumedKaon) || !passAcceptance(assumedPion)) continue;
+        passAcceptanceBoth++;
+
+        if (recoCharge[reco1] * recoCharge[reco2] >= 0) continue;
+        passOppositeCharge++;
+
+        const double mass = buildMass(assumedKaon, assumedPion);
+        hMassAccepted.Fill(mass);
+
+        if (recoPIDKaon[reco1] < kKaonTagThreshold) continue;
+        passKaonTag++;
+        hMassKaonTag.Fill(mass);
+
+        if (recoPIDPion[reco2] < kPionTagThreshold) continue;
+        passKaonPionTag++;
+        hMassKaonPionTag.Fill(mass);
+      }
     }
   }
 
@@ -178,12 +301,13 @@ int main(int argc, char* argv[]) {
   hMassAccepted.Write();
 
   TNamed selection("SelectionSummary",
-                   Form("Phi-as-KStar wrong-treatment study: valid PhiReco IDs, PhiReco1Angle<%.4f, "
-                        "PhiReco2Angle<%.4f, both RecoGoodTrack==1, both 0.15<=|cos(theta)|<=0.675, "
-                        "opposite charge, treat daughter1 as kaon and daughter2 as pion in mass build, "
-                        "require RecoPIDKaon>=2 on daughter1, and optionally RecoPIDPion>=2 on daughter2, "
-                        "hist range %.3f-%.3f GeV",
-                        matchAngleMax, matchAngleMax, massMin, massMax));
+                   Form("Phi-as-KStar wrong-treatment study: use Phi* branches when available, otherwise for each "
+                        "truth phi choose the final-state K+K- pair minimizing |E(KK)-E(phi)|, require "
+                        "|E(KK)-E(phi)|<%.3f and angle(KK,phi)<%.3f, then require GenMatchAngle<%.4f on both legs; "
+                        "both RecoGoodTrack==1, both 0.15<=|cos(theta)|<=0.675, opposite charge, treat daughter1 as "
+                        "kaon and daughter2 as pion in mass build, require RecoPIDKaon>=2 on daughter1, and "
+                        "optionally RecoPIDPion>=2 on daughter2, hist range %.3f-%.3f GeV",
+                        kTruthEnergyMatchMax, kTruthMomentumAngleMax, matchAngleMax, massMin, massMax));
   selection.Write();
 
   TParameter<long long>("TotalPhiCandidates", totalCandidates).Write();
